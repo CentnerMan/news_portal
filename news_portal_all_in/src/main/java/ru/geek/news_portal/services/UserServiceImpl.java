@@ -113,7 +113,7 @@ public class UserServiceImpl implements UserService {
         user.setFirstName(systemUser.getFirstName());
         user.setLastName(systemUser.getLastName());
         user.setEmail(systemUser.getEmail());
-        user.setRoles(Arrays.asList(roleRepository.findOneByName("READER")));
+        user.setRoles(Arrays.asList(roleRepository.findOneByName("ROLE_READER")));
         return userRepository.save(user);
     }
 
@@ -177,6 +177,7 @@ public class UserServiceImpl implements UserService {
         user.setUsername(userDTO.getUsername());
         user.setFirstName(userDTO.getFirstName());
         user.setLastName(userDTO.getLastName());
+        user.setPassword(passwordEncoder.encode(userDTO.getPassword()));
         user.setEmail(userDTO.getEmail());
         user.setRoles(userDTO.getRoles());
 
