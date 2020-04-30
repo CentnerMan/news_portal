@@ -40,4 +40,6 @@ public interface UserService extends UserDetailsService {
     UserAccountDTO userToDTO(String username);
 
     void updateDTO(UserModifyDTO userDTO);
+
+    public void createPasswordResetToken(User user, String token);
 }

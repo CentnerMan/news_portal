@@ -17,8 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import ru.geek.news_portal.base.entities.Article;
+import ru.geek.news_portal.base.entities.PasswordResetToken;
 import ru.geek.news_portal.base.entities.Role;
 import ru.geek.news_portal.base.entities.User;
+import ru.geek.news_portal.base.repo.PasswordResetTokenRepository;
 import ru.geek.news_portal.base.repo.UserRepository;
 import ru.geek.news_portal.base.repo.RoleRepository;
 import ru.geek.news_portal.dto.ArticleDto;
@@ -26,16 +28,14 @@ import ru.geek.news_portal.dto.UserAccountDTO;
 import ru.geek.news_portal.dto.UserModifyDTO;
 import ru.geek.news_portal.utils.SystemUser;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 public class UserServiceImpl implements UserService {
     private UserRepository userRepository;
     private RoleRepository roleRepository;
+    private PasswordResetTokenRepository passwordTokenRepo;
     private BCryptPasswordEncoder passwordEncoder;
     private ArticleService articleService;
     private List<Article> articleList;
@@ -74,7 +74,7 @@ public class UserServiceImpl implements UserService {
 
     /**
      * @author Ostrovskiy Dmitriy
-     * @created 17/04/2020
+     * created 17/04/2020
      * Метод возвращает статьи написанные пользователем
      * v1.0
      */
@@ -85,7 +85,7 @@ public class UserServiceImpl implements UserService {
 
     /**
      * @author Ostrovskiy Dmitriy
-     * @created 17/04/2020
+     * created 17/04/2020
      * Метод возвращает статьи написанные пользователем
      * v1.0
      */
@@ -144,7 +144,7 @@ public class UserServiceImpl implements UserService {
         user.setFirstName(systemUser.getFirstName());
         user.setLastName(systemUser.getLastName());
         user.setEmail(systemUser.getEmail());
-        user.setRoles(Arrays.asList(roleRepository.findOneByName("READER")));
+        user.setRoles(Collections.singletonList(roleRepository.findOneByName("READER")));
         return userRepository.save(user);
     }
 
@@ -235,5 +235,10 @@ public class UserServiceImpl implements UserService {
         userDTO.setArticleList(findArticlesByUser(username));
 
         return userDTO;
+    }
+
+    public void createPasswordResetToken(User user, String token) {
+        PasswordResetToken prt = new PasswordResetToken(token, user);
+        passwordTokenRepo.save(prt);
     }
 }

@@ -1,7 +1,9 @@
 package ru.geek.news_portal.controllers;
 
+import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.propertyeditors.StringTrimmerEditor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
@@ -11,14 +13,23 @@ import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.*;
 import ru.geek.news_portal.base.entities.User;
 import ru.geek.news_portal.base.repo.RoleRepository;
+import ru.geek.news_portal.dto.EmailDTO;
 import ru.geek.news_portal.dto.NewPasswordDTO;
 import ru.geek.news_portal.dto.UpdatePasswordDTO;
 import ru.geek.news_portal.dto.UserAccountDTO;
+import ru.geek.news_portal.services.EmailService;
+import ru.geek.news_portal.services.SecurityService;
 import ru.geek.news_portal.services.UserService;
 
+import javax.mail.MessagingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
+import java.net.MalformedURLException;
 import java.security.Principal;
+import java.util.Objects;
+import java.util.UUID;
+
+import static ru.geek.news_portal.utils.HttpRequestUtils.getAppUrl;
 
 /**
  * GeekBrains Java, news_portal.
@@ -32,14 +43,25 @@ import java.security.Principal;
 @Controller
 public class UserController {
     private final RoleRepository roleRepository;
-
+    private EmailService mailService;
     private final UserService userService;
+    private SecurityService securityService;
 
     @Autowired
     public UserController(RoleRepository roleRepository,
                           UserService userService) {
         this.roleRepository = roleRepository;
         this.userService = userService;
+    }
+
+    @Autowired
+    public void setMailService(EmailService service) {
+        mailService = service;
+    }
+
+    @ModelAttribute("emailObj")
+    public EmailDTO emailObj() {
+        return new EmailDTO();
     }
 
     @InitBinder
@@ -206,4 +228,94 @@ public class UserController {
     }
 
     //-------------------------------------------------------------------------------
+    //-------------------------------------------------------------------------------
+    //-------------------------------------------------------------------------------
+
+    @GetMapping("/resetPassword")
+    public String resetPasswordPage()
+    {
+        return "/resetPassword";
+    }
+
+
+    @SneakyThrows
+    @PostMapping("/resetPassword")
+    public String resetPassword(HttpServletRequest req,
+                                @ModelAttribute("emailObj") @Valid EmailDTO emailObj,
+                                BindingResult bindRes, Model model)
+    {
+        if (bindRes.hasErrors())
+            return "/resetPassword";
+
+        if (!userService.isUserExist(emailObj.username))
+        {
+            model.addAttribute("error", "Неверное имя пользователя");
+            return "/resetPassword";
+        }
+
+        sendResetPasswordEmail(req, emailObj);
+        model.addAttribute("success", "Письмо для сброса пароля успешно отправлено");
+        return "/resetPassword";
+    }
+
+
+    private void sendResetPasswordEmail(HttpServletRequest req, EmailDTO emailObj)
+            throws MalformedURLException, MessagingException
+    {
+        String appUrl = getAppUrl(req).toExternalForm();
+        User user = userService.findByUsername(emailObj.username);
+        String token = UUID.randomUUID().toString();
+
+        String url = appUrl + "/resetPassword/new?" +
+                "id=" + user.getId() + "&token=" + token;
+
+        String html = "<p>Для восстановления пароля перейдите по ссылке</p>" +
+                "<a href='" + url + "'>reset password</a>";
+
+        userService.createPasswordResetToken(user, token);
+        mailService.sendHTMLmessage(emailObj.email, "Восстановление пароля", html);
+    }
+
+
+    @GetMapping("/resetPassword/new")
+    public String newPasswordPage(Model model, @RequestParam("id") long id,
+                                  @RequestParam("token") String token)
+    {
+        try
+        {
+            securityService.validatePasswordResetToken(id, token);
+        }
+        catch (SecurityService.PasswordResetTokenException e)
+        {
+            model.addAttribute("message", e.getMessage());
+            return "/login";
+        }
+
+        model.addAttribute("newPassword", new NewPasswordDTO());
+        return "/newPassword";
+    }
+
+
+    @PostMapping("/resetPassword/save")
+    @PreAuthorize("hasAuthority('CHANGE__PASSWORD__PRIVILEGE')")
+    public String savePassword(@ModelAttribute("newPassword") @Valid NewPasswordDTO password,
+                               BindingResult bindRes, Model model)
+    {
+        if (bindRes.hasErrors())
+            return "/newPassword";
+
+        if (!Objects.equals(password.getNewPassword(), password.getMatchingPassword()))
+        {
+            model.addAttribute("error", "Повторенный пароль не совпадает с введенным");
+            return "/newPassword";
+        }
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User user = (User) auth.getPrincipal();
+        userService.updatePassword(user, password.getNewPassword());
+        model.addAttribute("success", "пароль успешно сохранен");
+
+        return "/newPassword";
+    }
+
 }
